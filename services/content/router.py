@@ -35,8 +35,8 @@ async def upload_content(content: ContentUpload, user: dict = Depends(verify_tok
             (content_id, content.title, content.body, content.content_type, metadata_json, user_id),
         )
         conn.commit()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Content upload failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Content upload failed")
     finally:
         conn.close()
 
@@ -113,8 +113,8 @@ async def upload_content_file(
             raise HTTPException(status_code=400, detail="JSON must be an object or array")
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="File upload failed")
     finally:
         conn.close()
 
@@ -123,12 +123,14 @@ async def upload_content_file(
 async def search_content(search: ContentSearch, user: dict = Depends(verify_token)):
     """Search content by keyword matching. Fixed: queries database directly instead of stale cache."""
     conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        "SELECT id, title, body, content_type, metadata FROM content WHERE is_indexed = 1"
-    )
-    rows = c.fetchall()
-    conn.close()
+    try:
+        c = conn.cursor()
+        c.execute(
+            "SELECT id, title, body, content_type, metadata FROM content WHERE is_indexed = 1"
+        )
+        rows = c.fetchall()
+    finally:
+        conn.close()
 
     query_lower = search.query.lower()
     query_words = set(query_lower.split())
@@ -165,14 +167,16 @@ async def search_content(search: ContentSearch, user: dict = Depends(verify_toke
     # If no keyword matches, return all content up to the limit
     if not results:
         conn = get_connection()
-        c = conn.cursor()
-        c.execute(
-            "SELECT id, title, body, content_type, metadata FROM content "
-            "WHERE is_indexed = 1 LIMIT ?",
-            (search.limit,),
-        )
-        fallback_rows = c.fetchall()
-        conn.close()
+        try:
+            c = conn.cursor()
+            c.execute(
+                "SELECT id, title, body, content_type, metadata FROM content "
+                "WHERE is_indexed = 1 LIMIT ?",
+                (search.limit,),
+            )
+            fallback_rows = c.fetchall()
+        finally:
+            conn.close()
 
         for row in fallback_rows:
             body_text = row["body"] or ""
@@ -197,13 +201,15 @@ async def search_content(search: ContentSearch, user: dict = Depends(verify_toke
 async def list_content(user: dict = Depends(verify_token)):
     """List all content from the database."""
     conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        "SELECT id, title, body, content_type, metadata, created_at "
-        "FROM content ORDER BY created_at DESC"
-    )
-    rows = c.fetchall()
-    conn.close()
+    try:
+        c = conn.cursor()
+        c.execute(
+            "SELECT id, title, body, content_type, metadata, created_at "
+            "FROM content ORDER BY created_at DESC"
+        )
+        rows = c.fetchall()
+    finally:
+        conn.close()
 
     content_list = [
         {

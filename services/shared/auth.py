@@ -13,12 +13,13 @@ from .config import SECRET_KEY, TOKEN_EXPIRY_SECONDS
 
 def create_token(user_id: str, username: str, role: str = "fellow") -> str:
     """Create a JWT token for a user."""
+    now = int(time.time())
     payload = {
         "user_id": user_id,
         "username": username,
         "role": role,
-        "exp": time.time() + TOKEN_EXPIRY_SECONDS,
-        "iat": time.time(),
+        "exp": now + TOKEN_EXPIRY_SECONDS,
+        "iat": now,
     }
     return jwt.encode(payload, SECRET_KEY, algorithm="HS256")
 
@@ -37,12 +38,8 @@ def verify_token(authorization: str = Header(None)) -> dict:
     try:
         token = authorization.removeprefix("Bearer ").strip()
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        if payload.get("exp", 0) < time.time():
-            raise HTTPException(status_code=401, detail="Token expired")
         return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=401, detail="Token verification failed")

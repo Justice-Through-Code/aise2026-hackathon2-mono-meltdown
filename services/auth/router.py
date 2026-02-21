@@ -45,8 +45,8 @@ async def register(user: UserRegister):
         conn.commit()
     except sqlite3.IntegrityError:
         raise HTTPException(status_code=400, detail="Username already exists")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Registration failed")
     finally:
         conn.close()
 
@@ -64,13 +64,15 @@ async def register(user: UserRegister):
 async def login(user: UserLogin):
     """Login with username and password. Returns a JWT token."""
     conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        "SELECT id, username, role, password_hash FROM users WHERE username = ? AND is_active = 1",
-        (user.username,),
-    )
-    row = c.fetchone()
-    conn.close()
+    try:
+        c = conn.cursor()
+        c.execute(
+            "SELECT id, username, role, password_hash FROM users WHERE username = ? AND is_active = 1",
+            (user.username,),
+        )
+        row = c.fetchone()
+    finally:
+        conn.close()
 
     if not row or not verify_password(user.password, row["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -91,25 +93,25 @@ async def get_profile(user: dict = Depends(verify_token)):
     user_id = user["user_id"]
 
     conn = get_connection()
-    c = conn.cursor()
+    try:
+        c = conn.cursor()
 
-    c.execute(
-        "SELECT id, username, email, created_at, role FROM users WHERE id = ?",
-        (user_id,),
-    )
-    row = c.fetchone()
+        c.execute(
+            "SELECT id, username, email, created_at, role FROM users WHERE id = ?",
+            (user_id,),
+        )
+        row = c.fetchone()
 
-    if not row:
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        c.execute("SELECT COUNT(*) FROM chat_history WHERE user_id = ?", (user_id,))
+        chat_count = c.fetchone()[0]
+
+        c.execute("SELECT SUM(tokens_used) FROM chat_history WHERE user_id = ?", (user_id,))
+        total_tokens = c.fetchone()[0] or 0
+    finally:
         conn.close()
-        raise HTTPException(status_code=404, detail="User not found")
-
-    c.execute("SELECT COUNT(*) FROM chat_history WHERE user_id = ?", (user_id,))
-    chat_count = c.fetchone()[0]
-
-    c.execute("SELECT SUM(tokens_used) FROM chat_history WHERE user_id = ?", (user_id,))
-    total_tokens = c.fetchone()[0] or 0
-
-    conn.close()
 
     return {
         "user_id": row["id"],

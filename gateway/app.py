@@ -98,15 +98,16 @@ async def health_check():
 async def detailed_status(user: dict = Depends(verify_token)):
     """Detailed system status (requires authentication)."""
     conn = get_connection()
-    c = conn.cursor()
-
-    c.execute("SELECT COUNT(*) FROM users")
-    user_count = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM chat_history")
-    chat_count = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM content")
-    content_count = c.fetchone()[0]
-    conn.close()
+    try:
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM users")
+        user_count = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM chat_history")
+        chat_count = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM content")
+        content_count = c.fetchone()[0]
+    finally:
+        conn.close()
 
     return {
         "system": {
@@ -149,14 +150,16 @@ async def api_info():
 async def analytics(user: dict = Depends(verify_token)):
     """Usage analytics for the platform."""
     conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT COUNT(DISTINCT user_id) FROM chat_history")
-    active_users = c.fetchone()[0]
-    c.execute("SELECT COUNT(*) FROM chat_history")
-    total_messages = c.fetchone()[0]
-    c.execute("SELECT SUM(tokens_used) FROM chat_history")
-    total_tokens = c.fetchone()[0] or 0
-    conn.close()
+    try:
+        c = conn.cursor()
+        c.execute("SELECT COUNT(DISTINCT user_id) FROM chat_history")
+        active_users = c.fetchone()[0]
+        c.execute("SELECT COUNT(*) FROM chat_history")
+        total_messages = c.fetchone()[0]
+        c.execute("SELECT SUM(tokens_used) FROM chat_history")
+        total_tokens = c.fetchone()[0] or 0
+    finally:
+        conn.close()
 
     return {
         "active_chatters": active_users,

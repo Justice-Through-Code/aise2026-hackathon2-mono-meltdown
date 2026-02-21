@@ -38,6 +38,7 @@ say so honestly rather than making things up. You can still help with general AI
 
 Keep responses focused and practical. Fellows are busy learning - respect their time."""
 
+    conn = None
     try:
         conn = get_connection()
         c = conn.cursor()
@@ -45,7 +46,6 @@ Keep responses focused and practical. Fellows are busy learning - respect their 
             "SELECT title, body FROM content WHERE is_indexed = 1 LIMIT 5"
         )
         rows = c.fetchall()
-        conn.close()
 
         if rows:
             content_context = "\n\nHere is some reference content from the AISE program:\n"
@@ -54,6 +54,9 @@ Keep responses focused and practical. Fellows are busy learning - respect their 
             base_prompt += content_context
     except Exception:
         pass  # If content lookup fails, proceed without context
+    finally:
+        if conn:
+            conn.close()
 
     return base_prompt
 
@@ -73,14 +76,16 @@ async def chat(message: ChatMessage, user: dict = Depends(verify_token)):
 
     # Load chat history for this session
     conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        "SELECT message, response FROM chat_history "
-        "WHERE user_id = ? AND session_id = ? ORDER BY timestamp DESC LIMIT ?",
-        (user_id, session_id, MAX_CHAT_HISTORY),
-    )
-    history_rows = c.fetchall()
-    conn.close()
+    try:
+        c = conn.cursor()
+        c.execute(
+            "SELECT message, response FROM chat_history "
+            "WHERE user_id = ? AND session_id = ? ORDER BY timestamp DESC LIMIT ?",
+            (user_id, session_id, MAX_CHAT_HISTORY),
+        )
+        history_rows = c.fetchall()
+    finally:
+        conn.close()
 
     # Build messages array for Groq API
     messages = [{"role": "system", "content": _get_system_prompt()}]
@@ -157,25 +162,27 @@ async def get_chat_history(
     user_id = user["user_id"]
 
     conn = get_connection()
-    c = conn.cursor()
+    try:
+        c = conn.cursor()
 
-    if session_id:
-        c.execute(
-            "SELECT id, message, response, timestamp, session_id, tokens_used "
-            "FROM chat_history WHERE user_id = ? AND session_id = ? "
-            "ORDER BY timestamp DESC LIMIT ?",
-            (user_id, session_id, limit),
-        )
-    else:
-        c.execute(
-            "SELECT id, message, response, timestamp, session_id, tokens_used "
-            "FROM chat_history WHERE user_id = ? "
-            "ORDER BY timestamp DESC LIMIT ?",
-            (user_id, limit),
-        )
+        if session_id:
+            c.execute(
+                "SELECT id, message, response, timestamp, session_id, tokens_used "
+                "FROM chat_history WHERE user_id = ? AND session_id = ? "
+                "ORDER BY timestamp DESC LIMIT ?",
+                (user_id, session_id, limit),
+            )
+        else:
+            c.execute(
+                "SELECT id, message, response, timestamp, session_id, tokens_used "
+                "FROM chat_history WHERE user_id = ? "
+                "ORDER BY timestamp DESC LIMIT ?",
+                (user_id, limit),
+            )
 
-    rows = c.fetchall()
-    conn.close()
+        rows = c.fetchall()
+    finally:
+        conn.close()
 
     history = [
         {
